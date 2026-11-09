@@ -22,7 +22,7 @@ from environment_servers.single_agent_turn_legacy.app import SingleAgentTurnLega
 from nemo_gym.client import ServerClient
 from nemo_gym.config import AgentServerRef, BaseServerConfig, ResourcesServerRef
 from nemo_gym.core import EpisodeId, MaterializedTask, NeMoGymResponse, TaskId
-from nemo_gym.server_runtime import SimpleServer, SingleAgentTurnRequest, SingleAgentTurnTaskInput
+from nemo_gym.server_runtime import CleanupContext, SimpleServer, SingleAgentTurnRequest, SingleAgentTurnTaskInput
 
 
 class _Cookie:
@@ -172,6 +172,30 @@ def test_legacy_adapter_forwards_aggregate_metrics_to_resources() -> None:
     assert response.status_code == 200
     assert response.json()["agent_metrics"] == {"mean/reward": 0.5}
     assert [(server, path) for server, path, _ in client.calls] == [("resources", "/aggregate_metrics")]
+
+
+def test_the_flat_adapter_finishes_the_cleanups_of_running_episodes_at_shutdown() -> None:
+    """Flat rows run the episode protocol too, so the app it builds itself still runs the shutdown sweep."""
+    environment_server, client = _environment_server()
+    adapter = SingleAgentTurnLegacyEnvironmentServer(config=environment_server.config, server_client=client)
+    app = adapter.setup_webserver()
+    released: list[str] = []
+
+    async def release() -> None:
+        released.append("agent session")
+
+    # An episode whose /run shutdown cancelled before its cleanup finished.
+    cleanup = CleanupContext(episode_id=EpisodeId(rollout_id="3-0"), cleanup_timeout_seconds=1)
+    cleanup.register_cleanup("agent session", release)
+    adapter._running_cleanups[id(cleanup)] = cleanup
+
+    async def shut_down() -> None:
+        async with app.router.lifespan_context(app):
+            pass
+
+    asyncio.run(shut_down())
+
+    assert released == ["agent session"]
 
 
 def test_legacy_adapter_preserves_task_identity_and_data():
