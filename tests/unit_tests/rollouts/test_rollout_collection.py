@@ -7199,7 +7199,12 @@ class TestRolloutCollection:
                     }
                 )
                 + b"\n"
-                for split, row_setting in (("train", {}), ("validation", {SKIP_TOKEN_CAPTURE_KEY_NAME: True}))
+                for split, row_setting in (
+                    ("train", {}),
+                    ("validation", {SKIP_TOKEN_CAPTURE_KEY_NAME: True}),
+                    # null, as a table writes for a row that does not set the column, counts as unset.
+                    ("unset", {SKIP_TOKEN_CAPTURE_KEY_NAME: None}),
+                )
             )
         )
         config = RolloutCollectionConfig(
@@ -7211,7 +7216,7 @@ class TestRolloutCollection:
 
         await Helper().run_from_config(config)
 
-        assert finalized_splits == ["train"]
+        assert finalized_splits == ["train", "unset"]
 
     async def test_run_from_config_requires_source_before_dispatch(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, empty_global_config: MagicMock
@@ -16326,6 +16331,7 @@ async def test_returned_and_stored_projection_share_one_decision(
     [
         ({}, {}),
         ({SKIP_TOKEN_CAPTURE_KEY_NAME: False}, {}),
+        ({SKIP_TOKEN_CAPTURE_KEY_NAME: None}, {}),
         ({SKIP_TOKEN_CAPTURE_KEY_NAME: True}, {"skip_token_capture": True}),
     ],
 )
