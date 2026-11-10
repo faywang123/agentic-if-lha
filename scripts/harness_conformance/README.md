@@ -29,8 +29,9 @@ Counts include execution errors and count each scenario once, rather than counti
 cascading evidence failures separately. Only the
 reporting job receives `checks: write`; probe jobs keep read-only permissions.
 Download the `harness-conformance-*` artifacts for test/setup logs and probe evidence.
-The reporter only uses artifacts from the current run attempt; rerun all jobs to
-refresh results for all selected harnesses.
+The reporter matches each selected job to its actual execution, retaining uploads
+from successful jobs that a partial retry did not rerun. A rerun that produces no
+evidence remains unavailable; an older upload cannot replace it.
 
 After publishing the result, **Harness conformance (non-blocking) / Publish check**
 also fails if P0 fails or any probe job fails or is cancelled, making the result
@@ -93,6 +94,23 @@ Legacy probes require the selected `codex`, `pi`, and `opencode` executables on
 `PATH`; Hermes must be importable in the same Python environment. Missing
 dependencies or unsuccessful runtime installation are execution failures.
 Omitting `--harness` selects all registered harnesses.
+
+Additional registered adapters are `claude_code`, `miniswe_sandboxed`, and
+`terminus_2_sandboxed`. Claude Code uses its pinned native runtime and the scripted
+Anthropic Messages endpoint. Its auxiliary title requests are retained and checked
+but do not consume the task's prescribed replies or failures. Mini-SWE and Terminus
+borrow a Resources-owned local workspace through a fixture-only provider; commands
+still execute through Gym's real local provider. Mini-SWE uses its native submission
+sentinel; Terminus uses JSON terminal commands and completion confirmation.
+For commands without a wire call ID, the checker requires a unique saved tool request
+with the exact prescribed name and arguments, then checks its joined status and output.
+
+Run Terminus probes as root in a disposable Linux runner with `tmux` installed
+(`sudo .venv/bin/python -m scripts.run_harness_conformance --harness terminus_2_sandboxed
+--output results/terminus`). Its runtime creates `/logs/agent` as root. Each scenario
+gets a separate tmux socket directory, and the fixture stops that server on cleanup.
+CI installs tmux and runs only the Terminus probe step as root. These probes measure
+the same checks as every other harness; registration does not imply conformance.
 
 No model service or model credentials are needed. Each scenario starts fresh
 local model, resources, agent, and compatibility environment servers on dynamically assigned loopback ports.
